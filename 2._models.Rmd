@@ -1,0 +1,240 @@
+---
+title: "Models"
+author: Ashley I. Naimi, PhD 
+header-includes:
+   - \DeclareMathOperator{\logit}{logit}
+   - \DeclareMathOperator{\expit}{expit}
+   - \usepackage{setspace}
+   - \usepackage{booktabs}
+output: #pdf_document
+  tufte::tufte_handout: default
+  #tufte::tufte_html: default
+bibliography: ref_main_v4.bib
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(here)
+library(VIM)
+library(ggExtra)
+library(Publish)
+
+thm <- theme_classic() +
+  theme(
+    legend.position = "top",
+    legend.title=element_blank(),
+    legend.background = element_rect(fill = "transparent", colour = NA),
+    legend.key = element_rect(fill = "transparent", colour = NA)
+  )
+theme_set(thm)
+options(width = 90)
+```
+
+\newpage
+\noindent {\Large \bf Outline}
+\vskip .25cm
+\noindent \underline{Models}
+\begin{itemize}
+  \item Overview of Modeling in Epidemiology
+  \item Causal versus Statistical Models
+  \item Parametric versus Nonparametric Models
+  \item Marginal versus Conditional Models
+\end{itemize}
+
+\newpage
+\onehalfspacing
+
+\noindent {\Large \bf \underline{Models}}
+
+\noindent {\Large \bf Overview of Models in Epidemiology}
+
+Models are an integral part of science [@Rosenblueth1945]. Epidemiologists rely exclusively on models to understand the relation between a particular exposure and outcome of interest. These models are often of a very particular type. Indeed, the most common approach to modeling in epidemiology is statistical regression [@Freedman2009]. Logistic regression in particular has become an analytic workhorse for epidemiologists when they seek to understand the relation between an exposure and a (dichotomous) health outcome. 
+
+Typically, the use of a logistic regression model proceeds as follows:^[This is a gross oversimplification. But the complexity that is being ignored here does not address the modeling issues that will be raised in subsequent sections.] 1) a researcher poses a question about the relation between an exposure and outcome of interest; 2) a host of potential threats to the validity of an assessment of the exposure-outcome relation are identified, most notably confounding variables; 3) data are collected in which the exposure-outcome relation can be quantified after mitigating the impact of the potential confounding variables; 3) the data are analyzed using logistic regression, with the measured confounders included in the model. 
+
+The logistic model is often formulated as follows $$ \logit[P( Y = 1 \mid X, C)] = \beta_0 + \beta_1 X + \beta_2 C $$
+where $\logit[a] = \log[a/(1-a)]$. 
+
+More practically, suppose we were intersted in the relation between quitting smoking and weight gain. We can examine this relation using data from the NHANES 1 Epidemiologic Follow-Up Study.^[These data are available on the website for the forthcoming book, Causal Inference, by Hernán and Robins. See: https://www.hsph.harvard.edu/miguel-hernan/causal-inference-book/]
+
+```{r, message=F}
+aa <- read_csv("./nhefs.csv")
+# original sample size
+nrow(aa)
+```
+
+We'll restrict our attention to a small subset of covariates:
+```{r}
+a <- aa %>% select(seqn,qsmk,smkintensity82_71,smokeintensity,active,exercise,wt82_71,sbp,dbp,hbp,hf,ht,hbpmed,sex,age,hf,race,income,marital,school,asthma,bronch,diabetes)
+a$hbp_71 <- a$hbp
+```
+
+Missing data is always important to address. We use the `aggr` function from the VIM package to create this great plot, showing how much missing data there is, and how it's distributed in the dataset. Note that some of the missing data in the dataset is coded numerically (e.g., if `exercise=2`, then the value was missing). We will ignore these missing data.
+
+To simplify, we'll restrict to complete cases. Note this is not something that should be done without careful consideration of missing data assumptions.^[For complete case analyses to be valid, data must be MCAR, or missing completely at random. For details, see @Little2014.]
+```{r}
+aggr(a)
+a <- a %>% na.omit()
+# sample size remaining after restricting to complete case
+nrow(a)
+```
+Let's examine the change in weight between 1971 and 1982.
+```{r}
+ggplot(a,aes(wt82_71)) + geom_density(bw=5)
+quantile(a$wt82_71,probs = seq(0, 1, 0.2))
+```
+
+And the distrbution of weight change and smoking intensity change.
+```{r}
+plot<-ggplot(a,aes(wt82_71,smkintensity82_71)) + geom_point() + geom_smooth(method="loess")
+ggMarginal(plot, type = "histogram")
+```
+
+And finally, a $2\times 2$ table for the relation between increased smoking and high-blood pressure.
+```{r}
+a$delta <- as.numeric(a$wt82_71>0)
+tab1<-table(a$qsmk,a$delta)
+addmargins(tab1)
+chisq.test(tab1)
+```
+
+Traditionally, the approach to quantifying the relation between quitting smoking and gaining weight is to identify a set of confounders. Let's assume for our purpose that the relevant confounders are as listed in the model below. The most common approach to estimating the effect is to fit a logistic model, adjusting for these confounders:
+
+```{r}
+model1 <- glm(delta~qsmk+sex+age+race+income+
+                marital+school+active+hf+smokeintensity+
+                exercise+diabetes+hbp_71,data=a,family=binomial(link="logit"))
+summary(model1)
+```
+The output from this model tells us that the odds of weight gain among those who quit smoking is `r round(exp(summary(model1)$coefficients[2,1]),2)` times the odds of weight gain among those who did not quit (with 95% CIs of `r round(exp(summary(model1)$coefficients[2,1] - 1.96*summary(model1)$coefficients[2,2] ),2)`, `r round(exp(summary(model1)$coefficients[2,1] + 1.96*summary(model1)$coefficients[2,2] ),2)`).
+
+It might be tempting to conclude that this is the effect of quitting smoking on weight gain. One might be further tempted to interpret this effect as a comparison of odds if everyone quit versus if no one quit. Unfortunately, there are a number of considerations related to the types of models we are using that jeapordize the validity of such an interpretation.
+
+\noindent {\Large \bf Causal versus Statistical}
+
+Any statistical association between an exposure and outcome of interest can be caused by a number of relations:
+\begin{itemize}
+\item Direct causation
+\item Reverse causation
+\item Confounding
+\item Selection (collider)
+\item Chance
+\end{itemize}
+
+These relations are codified in the causal model, but not the staitstical model. For example, depending on how/when it was measured, we might draw a directed acyclic graph in which diabetes is a common cause of both quitting smoking (becuase diabetics will refrain from smoking) and weight gain, or in which diabetes mediates (quitting smoking changes diabetes risk) the relation between smoking and high blood pressure.  
+```{r, out.width = "200px",fig.cap="Two scenarios depicting the relation between smoking ($X$), diabetes, and high blood pressure ($Y$).",echo=F}
+knitr::include_graphics("F5.pdf")
+```
+
+The critical point is that if the interest if the total effect of quitting smoking on the outcome is of interest, and if diabetes is in fact a mediator of this relation, then it should **not** be adjusted for.^[Note that at times, clinicians/researchers are primarily interested in the effect of smoking independent of it's effect on diabetes. In this case, methods for mediation analysis are required.] Otherwise, a key part of the effect will be blocked. Alternatively, if diabetes is confounding the relation between quitting smoking and weight gain, then it must be adjusted for to reduce confounding bias.
+
+Technically, the two DAGs are Markov (or observationally) equivalent, or are in the same **equivalence class** [@Pearl2009a]. Two or more DAGs are said to be Markov equivalent if and only if they have the same skeletons (i.e., the same nodes) and the same set of colliders [@Verma1990]. In non-technical terms, a set of DAGs that are Markov equivalent means that no statistical analysis can be used to distinguish between them. 
+
+\noindent {\Large \bf Parametric versus Nonparametric}
+
+A second key consideration is the nature of the assumptions invoked when specifying the logistic regression model. When data are collected for an observational study, assuming the causal model (DAG) is correct, the extent of what we know about how the outcome relates to an exposure and confounders can be written as follows:
+\begin{align}
+		& E(Y \mid X, \mathbf{C}) = g(X,\mathbf{C}),
+\end{align}
+where $g(\bullet)$ represents a function of $X$ and $C$. In an observational cohort study, the exact form of the exposure and outcome models is usually completely unknown [@Robins2001]. However, despite this lack of knowledge, by using the logistic model, we are willing to assume the outcome follows a very particular model:
+\begin{align}
+		& E(Y \mid X, \mathbf{C}) = g(X,\mathbf{C}) = \expit\{ \beta_0 + \beta_1 X + \beta_2 \mathbf{C} \}
+\end{align}
+
+even though the true model may be any number of models, for example:
+\begin{align}
+		& E(Y \mid X, \mathbf{C}) = g(X,\mathbf{C}) = \expit \big \{ \frac{\beta_0}{\beta_1 X} + \beta_2 \mathbf{C} \big \} \\
+		& E(Y \mid X, \mathbf{C}) = g(X,\mathbf{C}) = \beta_0 \times X^{\beta_1} \times C^{\beta_2} \\
+		& E(Y \mid X, \mathbf{C}) = g(X,\mathbf{C}) = \frac{\beta_0}{ \beta_1 X + \beta_2 \mathbf{C}}
+\end{align}
+
+There are ways to avoid assuming the outcome follows a logistic model conditional on the exposure and confounders. Briefly, this would entail using a nonparametric estimator (such as, e.g., machine learning algorithms) to quantify $g(X, \mathbf{C})$.
+
+\noindent {\Large \bf Marginal versus Conditional}
+
+A third complication with interpreting the estimate for quitting smoking as "what would be observed if everyone quit versus if no one quit" is the distinction between marginal and conditional models. This distinction becomes more complicated when interest lies in estimating non-collapsible parameters (i.e., non-linear model) such as the odds ratio or the hazard ratio [@Greenland2005b].
+
+Briefly, a conditional effect estimate can be obtained by fitting a conditional model such as:
+$$ g[E(Y \mid X, C )] = \beta_0 + \beta_1 X + \beta_2 C  $$
+
+A marginal model can be obtained by fitting a marginal model using inverse probability weighting (which we will see in the next section), or by marginalizing a conditional model (which we will see in the g computation section).
+
+For a linear model, the marginal and conditional effect estimate will be equivalent, unless there is an interaction between the exposure and a covariate (in which case they may, but need not be, equivalent). For example, if we consider the relation between quitting smoking and weight gain after adjusting for sex, we can obtain a conditional and marginal risk difference as follows:
+```{r}
+
+linear_model <- glm(delta ~ qsmk + sex, data=a, family=gaussian("identity"))
+round(coef(linear_model)[2]*100,2)
+
+```
+Thus the conditional risk difference is `r round(coef(linear_model)[2]*100,2)` excess cases of weight gain among quitters versus nonquitters per 100 participants. We can marginalize over the distribution of sex in the sample as:
+
+```{r}
+
+aa0 <- a
+aa0$qsmk <- 0
+risk0 <- predict(linear_model, newdata = aa0)
+
+aa1 <- a
+aa1$qsmk <- 1
+risk1 <- predict(linear_model, newdata = aa1)
+
+round(mean(risk1 - risk0)*100,2)
+
+```
+Thus the marginal risk difference is `r round(mean(risk1 - risk0)*100,2)` excess cases of weight gain among quitters versus nonquitters per 100 participants, the same as the conditional risk difference.
+
+If we interact quitting smoking and sex, the conditional and marginal are no longer equivalent because there are two effects for the conditional model (one for each quit smoking level), but only one for the marginal. 
+```{r}
+
+linear_model2 <- glm(delta ~ qsmk + sex + qsmk:sex, data=a, family=gaussian("identity"))
+# effect among sex = 0
+round(coef(linear_model2)[2]*100,2)
+# effect among sex = 1
+round((coef(linear_model2)[2]+coef(linear_model2)[4])*100,2)
+```
+
+The conditional effect among `sex = 0` is `r round(coef(linear_model2)[2]*100,2)` but among `sex=1` is `r round((coef(linear_model2)[2]+coef(linear_model2)[4])*100,2)`. On the other hand, if we marginalize over sex in this conditional model with an interaction, we get a marginal effect estimate of:
+
+```{r}
+
+aa0 <- a
+aa0$qsmk <- 0
+risk0 <- predict(linear_model2, newdata = aa0)
+
+aa1 <- a
+aa1$qsmk <- 1
+risk1 <- predict(linear_model2, newdata = aa1)
+
+round(mean(risk1 - risk0)*100,2)
+
+```
+
+This becomes more complicated if the estimand of interest is noncollapsible. For example, if we are interested in the odds ratio, the conditionally adjusted odds ratio is:
+```{r}
+
+logit_model <- glm(delta ~ qsmk + sex, data=a, family=binomial("logit"))
+round(exp(coef(logit_model)[2]),2)
+
+```
+but if we marginalize over sex, we get:
+```{r}
+aa0 <- a
+aa0$qsmk <- 0
+risk0 <- predict(logit_model, newdata = aa0,type="response")
+
+aa1 <- a
+aa1$qsmk <- 1
+risk1 <- predict(logit_model, newdata = aa1,type="response")
+
+num<-mean(risk1)/(1-mean(risk1))
+den<-mean(risk0)/(1-mean(risk0))
+
+round(num/den,2)
+```
+
+The complication here is that, while these numbers are numerically equivalent, the estimands are not mathematically equivalent. In situations where number of events is higher, or when there are many covariates in the model, the conditionally adjusted OR will be further from the null than the marginally adjusted OR [@Muller2014]. This can create problems for interpretation, becuase a conditionally estimated OR does not always correspond to the marginal contrast, interpreted as what would be observed if everyone versus no one were exposed.
+
+\newpage
+
+# References

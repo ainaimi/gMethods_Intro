@@ -1,0 +1,292 @@
+---
+title: "Introduction to Causal Inference"
+author: Ashley I. Naimi, PhD 
+header-includes:
+   - \DeclareMathOperator{\logit}{logit}
+   - \DeclareMathOperator{\expit}{expit}
+   - \usepackage{setspace}
+   - \usepackage{booktabs}
+output: #pdf_document
+  tufte::tufte_handout: default
+  #tufte::tufte_html: default
+bibliography: ref_main_v4.bib
+---
+
+```{r setup, include=FALSE}
+library(here)
+
+```
+
+\newpage
+\noindent {\Large \bf Outline}
+\vskip .25cm
+\noindent \underline{Causal Inference}
+\begin{itemize}
+  \item Introduction
+  \item The Logic of Causal Inference
+  \item Complex Longitudinal Data
+  \item Notation
+  \item Estimand, Estimator, Estimate
+  \item Identifiability: Average Treatment Effect
+  \begin{itemize}
+      \item[a.] Counterfactual Consistency
+      \item[b.] No Interference
+      \item[c.] Excheangability
+      \item[d.] Correct Model Specification
+      \item[e.] Positivity
+  \end{itemize}
+  \item Identifiability in other settings
+    \begin{itemize}
+      \item[a.] Exclusion restriction
+      \item[b.] Instrumentation
+      \item[c.] Homogeneity
+  \end{itemize}
+  \item Non-identifiability: Bounding Effects
+  \item Correlation versus Causation
+\end{itemize}
+
+\newpage
+\onehalfspacing
+
+\noindent {\Large \bf \underline{Causal Inference}}
+
+\noindent {\Large \bf Introduction}
+
+"Causal inference" deals primarily with the formal mechanisms by which we can combine data, assumptions, and models to interpret a correlation (or association) as a causal relation.^[There are a number of excellent introductory books and articles on causal inference in the empirical sciences. Here are some excellent options: @Hernan2015, @Pearl2016, @Imbens2015] The framework by which we define what we mean by "causal relation" or "causal effect" is the **potential outcomes framework**.
+
+A central notion in the potential outcomes framework is the counterfactual. This notion stems from the intuitive and informal practice of interpreting cause-effect relations as **circumstances (e.g., health outcomes) that would have arisen had things (e.g., exposures) been different**.
+
+While this intuition serves an important purpose, it is not sufficient for doing rigorous science. Suppose we ask: "what is the effect of smoking on CVD risk, irrespective of smoking's effect on body weight?" This question seems clear and intiutive. To answer this question, we would do a study in which we collect data, enter these into a computer, perform some calculations, and obtain a number (the "effect").
+
+But there is a problem.^[This problem was articulated by @Robins1987, and I am using the example from his paper.] The calculations performed by the computer are **rigorously defined mathematical objects**. On the other hand, **english language sentences about cause effect relations are ambiguous**. For example, the "effect of smoking" can mean many different things:
+
+\begin{itemize}
+\item All people smoke any tobacco ever versus no people smoke tobacco ever.
+\item All people smoke 3 cigarettes per day versus all people smoke 2 cigarettes per day.
+\item All people who have smoked any tobacco in the last 15 years cease to smoke any tobacco whatsoever.
+\end{itemize}
+\noindent Similarly, "irrespective of" can mean a number of things:
+\begin{itemize}
+\item The effect of smoking on CVD risk that would be observed in a hypothetical world where smoking did not affect body mass?
+\item The effect of smoking on CVD risk if everyone were set to "normal" body mass?
+\item The effect of smoking on CVD risk if everyone were held at the body mass they had in the month prior to study entry?
+\end{itemize}
+
+But the numerical strings of data and the computer algorithms applied to these data are well defined mathematical objects, which do not admit such ambiguity. Depending on several choices, including the data, how variables are coded, and the modeling strategy, the computer is being told which question to answer. There is a lot of potential uncertainty in the space between the English language sentences we use to ask causal questions, and the computer algorithms we use to answer those questions. Causal inference is about clarifying this uncertainty.
+
+\noindent {\Large \bf The Logic of Causal Inference}
+
+Recently, some authors have raised concerns about the increasing popularity of causal inference methods [e.g., @Vandenbroucke2016,@Krieger2016]. Many of the papers written on this topic share a common objection: inferring causality based on a set of methods that require heroic assumptions will ultimately constrain our ability to improve population health. 
+
+Some of these papers make some important points.^[In an excellent response to these concerns, @Greenland2017 recently pointed out that there are in fact issues with the "causal inference" framework, notably it's name. He prefers "causal modeling."] However, they are premised on a fundamental misunderstanding of the logic of causal inference. In particular, these papers presume that the "causal inference" approach to inferring causality proceeds as follows:
+
+\begin{quotation}
+If our assumptions hold, then we can interpret the estimated association causally.
+\end{quotation}
+
+Rather, loosely speaking, the general structure that "causal inference" gives is the following:
+
+\begin{quotation}
+For a given dataset and a given target parameter, then here are the assumptions we need to interpret the estimated association causally.
+\end{quotation}
+
+There are many issues (some subtle) that I'm ignoring here. However, in the remainder of this course, I will try to clarify precisely what this general structure of causal inference is, and why the distinction between these two ways of framing causal inference is of critical importance.
+
+\noindent {\Large \bf Complex Longitudinal Data}
+
+This short course is about methods that can be applied to measured at a single time point, as well as complex longitudinal data. For clarity, let's define complex longitudinal data. We will be dealing with data from a cohort study, individuals sampled from a well-defined target population, and clear study start and stop times (i.e., closed cohort). Data from such a cohort are **longitudinal** when they are measured repeatedly over time.^[Another such form is when data are measured repeatedly across space. We will not be dealing with these data here.]
+
+Different scenarios can lead to longitudinal data:
+\begin{itemize}
+\item[1.] exposure and covariates do not vary over time, but the study outcome can occur more than once
+\item[2.] exposure and covariates vary over time, but the study outcome can only occur once
+\item[3.] exposure and covariates vary over time, and the study outcome can occur more than once
+\end{itemize}
+We will deal with data that from scenario 2 (however, it is not difficult to generalize the logic to scenario 3). 
+Repeated exposure, covariate, and/or outcome measurement is what leads to "longitudinal" data. But why complex? 
+
+Repeated measurement over time opens up the possibility of complex causal relations between past and future covariates. Suppose we measure an expsoure twice over follow-up, a covariate once, and the outcome at the end of follow-up (Figure 1). If we can assume that past exposure/covariate values do not affect future exposure/covariate values (usually a very risky assumption), we might not consider these data "complex," becuase we can use many standard methods we already know to analyze these data.
+```{r, out.width = "200px",fig.cap="Longitudinal data that might not be considered `complex' because there is no feedback between exposure and covariates.",echo=F}
+knitr::include_graphics("./figures/F1.pdf")
+```
+On the other hand, if past exposure/covariates affect future exposure/covariates in such a way that prior exposures or covariates confound future exposures (Figure 2), more advanced analytic techniques are needed. 
+```{r, out.width = "200px",fig.cap="The simplest kind of complex longitudinal data. Note that the exposure at time zero affects the covariate at time 1 which affects the exposure at time 1. This feedback leads to confounding of the time 1 expsoure by a covariate that is affected by the prior exposure. Analysis of these data require more general methods to  account for this complex form of confounding.",echo=F}
+knitr::include_graphics("./figures/F2.pdf")
+```
+In this short course, we will learn how to use g methods to account for this type of complex time-varying confounding.
+
+\noindent {\Large \bf Notation}
+
+The building blocks for causal inference are **potential outcomes** [@Rubin2005]. These are conceptually distinct from **observed outcomes**. Potential outcomes are functions of exposures. For a given exposure $x$, we will write the potential outcome as $Y^x$.^[Alternate notation includes: $Y_x$, $Y(x)$, $Y\mid Set(X=x)$, and $Y|do(X=x)$.] **This is interpreted as "the outcome ($Y$) that would be observed if $X$ were set to some value $x$"**. For example, if $X$ is binary [denoted $X \in (0,1)$], then $Y^x$ is the outcome that would be observed if $X=0$ or $X=1$. If we wanted to be specific about the value of $x$, we could write $Y^{x=0}$ or $Y^{x=1}$ (or, more succinctly,  $Y^{0}$ or $Y^{1}$).
+
+______________________________________________________________________________________________
+\begin{quotation}
+\noindent \textsc{Study Question 1:} Suppose you collect data from a single person and find that they are exposed. Can you interpret their outcome to be the potential outcome that would have been observed had they been exposed? Why or why not?
+\end{quotation}
+
+______________________________________________________________________________________________
+
+
+When the exposoure and/or outcome are measured repeatedly over follow-up, notation must account for that. We thus use subscripts to denote when the variable was measured. For example, if the exposure is measured twice, we can denote the first measurement $X_0$ and the second $X_1$. Additionally, we use overbars to denote the history of a variable over follow-up time. For example, $\overline{X}_1$ denotes the set $\{X_0,X_1\}$. More generally, for some arbitrary point over follow-up $m$, $\overline{X}_m$ denotes $\{X_0,X_1,X_2, \ldots X_m\}$. We can then define potential outcomes as a function of these exposure histories: For two exposure measurements, $\overline{X}_j = \{1,1\}$, $Y^{\overline{x}_j = \overline{1}}$ is the outcome that would be observed if $X_0$ were set to $1$ and $X_1$ were set to $1$.
+
+\noindent {\Large \bf Estimand, Estimator, Estimate}
+
+Causal inference starts with a clear idea of the effect of interest (the target causal parameter). To do this, it helps to distinguish between estimands, estimators, and estimates.
+
+______________________________________________________________________________________________
+\begin{quotation}
+\noindent \textsc{Study Question 2a:} You are familar with the well known odds ratio equation for a $2\times 2$ table: ($ab/cd$). Is this an estimand, estimator, or estimate?
+\end{quotation}
+
+______________________________________________________________________________________________
+
+
+The **estimand** is the (mathematical) object we want to quantify. It is, for example, the causal risk difference, risk ratio, or odds ratio for our exposure and outcome of interest. In our smoking CVD example, we might be interested in:
+
+$$ E( Y^{1} - Y^{0} ),\;\;\;\frac{E( Y^{1})}{E( Y^{0} )},\;\;\; \frac{Odds( Y^{1} = 1)}{ Odds( Y^{0} = 1)}, $$
+where $Odds(Y^x = 1) = E(Y^x )/[1-E(Y^x)]$, and where $E(.)$ is the expectation operator taken with respect to the total population.^[Throughout this course, if the outcome $Y$ is binary, then $E(Y) \equiv P(Y = 1)$. Or, the expectation of $Y$ is equivalent to the probability that $Y = 1$. For the more technially oriented, $$ E(Y) = \int y f(y) dy $$ where $f(y)$ is the probability density function of $Y$.] There are many others besides these.
+
+______________________________________________________________________________________________
+\begin{quotation}
+\noindent \textsc{Study Question 2b:} List some estimators that can be used to quantify the odds ratio.
+\end{quotation}
+
+______________________________________________________________________________________________
+
+The estimand is the object we want to estimate. The **estimator** is an equation that allows us to use our data to quantify the estimand. Suppose, for example, we were explicitly intersted in quantifying the causal risk difference for the relation between smoking and CVD risk. To do this, we have to start by quantifying the associational risk difference, but there are many ways to do this, including ordinary least squares, maximum likelihood, or the method of moments.
+
+To be specific, let's simulate some hypothetical data on the relation between smoking and CVD. Let's look at ordinary least squares and maximum likelihood as estimators:
+```{r, echo=T,fig.star=T,tidy=F,highlight=T}
+### CODE SET 1
+# define the expit function
+expit<-function(z){1/(1+exp(-(z)))}
+set.seed(123)
+n<-1e6
+confounder<-rbinom(n,1,.5)
+smoking<-rbinom(n,1,expit(-2+log(2)*confounder))
+CVD<-rbinom(n,1,.1+.05*smoking+.05*confounder)
+
+# the data
+head(data.frame(CVD,smoking,confounder))
+
+round(mean(confounder),3)
+round(mean(smoking),3)
+round(mean(CVD),3)
+
+#OLS
+round(coef(lm(CVD~smoking+confounder)),4)
+
+#ML1
+round(coef(glm(CVD~smoking+confounder,family=poisson("identity"))),4)
+
+#ML2
+round(coef(glm(CVD~smoking+confounder,family=binomial("identity"))),4)
+### END CODE SET 1
+```
+```{r, echo=F}
+## for calculations below
+set.seed(123)
+n<-1e6;confounder<-rbinom(n,1,.5)
+smoking<-rbinom(n,1,expit(-2+log(2)*confounder))
+CVD<-rbinom(n,1,.1+.05*smoking+.05*confounder)
+pC<-round(mean(confounder),3)
+ols_RD<-round(coef(lm(CVD~smoking+confounder)),4)
+```
+In our simple setting with 1 million observations, ordinary least squares and maximum likelihood yielded the same associational risk difference (as expected) even though they are different **estimators**. Finally, the values obtained from each regression approach are our **estimates**.
+
+\noindent {\Large \bf Identifiability: Average Treatment Effect}
+
+In our simulation example, we estimated the associational risk difference using three different estimators. Estimating associations is all we can do with empirical data. But we want to use the associational risk difference to quantify the causal risk difference. We can only do so if the causal risk difference is **identified**. _A parameter (e.g., causal risk difference) is identified if we can write it as a function of the observed data._
+
+The causal risk difference is defined as a contrast of potential outcomes. Referring back to our simulated example,^[To simplify the explanation here, I am ignoring the fact that we conditioned on (or adjusted for) confounders $C$. Of course, without adjusting for $C$, we get a confounded estimate. However, if we adjust for $C$, we no longer obtain the average treatment effect. Instead, we obtain the conditional treatment effect. The distinction between average and conditional treatment effects will be made clearer in the section on models.] we want to estimate the causal risk difference which is an example of an average treatment effect:
+$$ E( Y^{1} - Y^{0} ), $$
+where $Y^1$, $Y^0$ are the potential CVD outcomes that would be observed if smoking were set to 1 and 0, respectively. On the other hand, the associational risk difference is defined as a contrast of observed outcomes:
+$$ E( Y \mid X = 1) - E( Y\mid X = 0), $$
+where each term in this equation is interpreted as the risk of CVD **among those who had $X=x$**. The causal risk difference is identified if the following equation holds:^[Throughout this course, we will assume that the target parameter of interest is a causal contrast of potential outcomes. Sometimes, the target parameter of interest is an associational contrast, and the assumptions needed are less demanding. See, e.g., @Naimi2016c.]
+$$E(Y^x) = E(Y \mid X = x) $$
+which says that the risk of CVD that would be observed if everyone were set to $X=x$ is equal to the risk of CVD that we observe among those with $X=x$. In this equation, the right hand side equation is written entirely in terms of observed data ($Y=1$). The left hand side is a function of unobserved potential outcomes ($Y^x=1$). This equivalence will only hold if we can make some assumptions.
+
+The first is **counterfactual consistency**, which states that the potential outcome that would be observed if we set the exposure to the observed value is the observed outcome [@Hernan2005b,@Hernan2008a,@Hernan2011a,@VanderWeele2013b].^[While somewhat convoluted, this assumption is about legitimizing the connection between our observational study, and future interventions in actual populations. In our observational study, we **see** people with with a certain value of the exposure. In a future intervention, we **set** people to a certain value of the exposure.] Formally, counterfactually consistency states that:
+$$\text{ if }X = x\text{ then }Y^x = Y $$
+The status of this assumption remains unaffected by the choice of analytic method (e.g., standard regression versus g methods). Rather, this assumption’s validity depends on the nature of the exposure assignment mechanism.
+
+We must also assume **no interference**, which states that the potential outcome for any given individual does not depend on the exposure status of another individual [@Hudgens2008,@Naimi2015]. If this assumption were not true, we would have to write the potential outcomes as a function of the expsoure status of multiple individuals. For example, for two different people indexed by $i$ and $j$, we might write: $Y_i^{x_i,x_j}$.^[Together, counterfactual consistency and no interference make up the stable-unit treatment value assumption (SUTVA), first articulated by @Rubin1980.] Notation and methods that account for interference can be somewhat complex [@Tchetgen2012,@Halloran2016], and we will not consider the impact of interference here.
+
+Together, counterfactual consistency and no interference allow us to make some progress in writing the potential risk $E(Y^x)$ as a function of the observed risk $E(Y \mid X=x)$. Specifically, by counterfactual consistency and no interference, we can do the following:
+$$ E( Y \mid X = x) = E(Y^x \mid X = x) $$
+A third assumption is **exchangeability**, which implies that the potential outcomes under a specific exposure ($Y^x$) are independent of the observed exposures $X$ [@Greenland1986,@Greenland1999,@Greenland2009]. If this holds, then we have: 
+$$ E(Y^x \mid X=x) = E(Y^x  ) $$
+If there is any confounding, selection, or information bias, the potential outcome will be associated with the observed exposure, and we cannot remove $X=x$ from the conditioning statement.^[For an excellent discussion of why the potential outcomes are independent of the observed exposure under exchangeability, see Chapter 2 of @Hernan2015] What this means is that the exposure is predictive of prognosis, independent of it's actual effect on the outcome. 
+
+______________________________________________________________________________________________
+\begin{quotation}
+\noindent \textsc{Study Question 3:} Why is the word "exchangeable" used to describe this concept? What, precisely, is being "exchanged"?
+\end{quotation}
+
+______________________________________________________________________________________________
+
+
+Although it seems that we have successfully written the potential risk as a function of the observed data, we are in need of two more assumptions. The first is **correct model specification**. This assumption is required when we rely on models to estimate effects, but can be minimized by using semi- or non-parametric approaches. There are several ways in which this assumption can be violated, and these include the omission of relevant interaction terms, or adjusting for continuous covariates using linear terms only. We will get into this issue in more depth when we discuss models.
+
+______________________________________________________________________________________________
+\begin{quotation}
+\noindent \textsc{Study Question 4:} Can you think of a relation between correct model misspecification and exchangeability?
+\end{quotation}
+
+______________________________________________________________________________________________
+
+The second is **positivity**,^[Also known as the experimental treatment assignment assumption.] and requires exposed and unexposed individuals within all confounding levels [@Mortimer2005,@Westreich2010a]. There are two kinds of positivity violations (non-positivity): structural (or deterministic) and stochastic^[The word **stochastic** is derived from the greek word "to aim," as in "to aim for a target."] (or random). Structural non-positivity occurs when individuals with certain covariate values cannot be exposed. For example, in occupational epidemiology work-status (employed/unemployed in workplace under study) is a confounder, but individuals who leave the workplace can no longer be exposed to a work-based exposure. Alternatively, stochastic non-positivity arises when the sample size is not large enough to populate all confounder strata with observations. When faced with positivity violations, methods must be used that are less affected by positivity violations.^[Warning: one cannot simply "avoid" positivity. In an extreme setting, nonpositivity means that those who were exposed in the sample are very unlikely to be exposed (and vice versa). In such a situation, it may not make sense to estimate the average treatment effect, because there is a subset of the population who may never realistically be exposed (or unexposed). In this case, g estimation, cTMLE, and the parametric g formula can actually estimate parameters that differ slightly from the ATE.] These include g estimation of a structural nested model, collaborative targeted minimum loss-based estimation, and the parametric g formula.
+
+\noindent {\Large \bf Identifiability in Other Settings}
+
+Let's review what we've covered so far. We defined our causal effect of interest as the average treatment effect for a binary outcome / exposure, specifically the causal risk difference:
+$$ E (Y^{x=1}  - Y^{x=0})  $$
+where $Y^x$ is the potential outcome that would be observed for a given individual if the exposure $X$ were set to some value $x$. However, using observed data, we can only quantify the associational risk difference:
+$$ E(Y \mid X=1) - E(Y \mid X=0) $$
+The causal risk difference is identifiable if we can re-write the associational risk difference as the causal risk difference, which we can do if we assume counterfactual consistency, no interference, exchangeability, positivity, and correct model specification. 
+
+However, these identifiability assumptions are specific to the average treatment effect. If we were interested in a different estimand, we may need (or could use) different assumptions. For example, in a randomized trial, we may want to estimate the effect of treatment on the treated. From the structure of an RCT, we end up with a data generating mechanism as depicted in Figure 3.
+
+```{r, out.width = "200px",fig.cap="Data generated from a randomized clinical trial, where $Z$ is an indicator of treatment assignment, $X$ is an indicator of whether treatment was taken, $Y$ is the outcome, and $C$ are covariantes predict compliance with the treatment and the outcome.",echo=F}
+knitr::include_graphics("./figures/F4.pdf")
+```
+In this Figure, $Z$ is an indicator of whether treatment was assigned, $X$ is an indicator of whether the participant complied with the assignment protocol, $C$ is a vector of confounders predicting compliance and the outcome, and $Y$ is the outcome of interest. In this case, the effect of treatment on the treated is defined as:
+
+$$ E(Y^{x=1} - Y^{x=0} \mid X = 1) $$
+
+It turns out that in this setting, we can use an instrumental variable based estimator to compute the ETT,^[The IV estimator for this setup is actually $$ \frac{E[E(Y \mid C, Z=1) - E(Y \mid C, Z=0)]}{E[E(X \mid C, Z=1) - E(X \mid C, Z=0)]}  $$] provided some key assumptions hold. 
+If we want to use an instrumental variable estimator to estimate the ETT, then in addition to counterfactual consistency, no interference, exchangeability, positivity, and correct model specification, we also need the exclusion restriction:
+$$ Y^{xz} = Y^x \text{ for all }x \in \{ 0, 1\} $$
+This assumption says that the treatment assignment indicator does not affect the outcome. We also need the "instrumentation" assumption:
+$$ E( X^{z=1} > X^{z=0} ) \geq \delta > 0 $$
+which says that the treatment assignment indicator will, on average, increase treatment use. Finally, we need the homogeneity assumption:
+$$ E( X^{z=1} \geq X^{z=0} ) = 1 $$
+which states that there are no "defiers" in the study, i.e., people who do the opposite of what they are assigned to do.
+
+\noindent {\Large \bf Non-Identifiability: Bounding Effects}
+
+What happens when the effect we want to estimate is not identifiable? Suppose, for example, exchangeability is violated becuase we could not randomize our exposure? Or perhaps there was some loss to follow-up that could not be accounted for with absolute certainty? More likely there is both unmeasured confounding and loss to follow-up. When this happens, we get a point estimate for the causal effect of interest, but it could either be smaller or larger in magnitude due to the influence of the unmeasured confounder and loss to follow-up. 
+
+In order to get a precise measure of **all the possible values the point estimate can take** as a result of unmeasured confounding and loss to follow-up, we can estimate bounds for the point estimate of interest. Confidence intervals are bounds on the point esimate of interest that capture the uncertainty that results from random variation [@Wasserman2004]. In contrast, identification bounds capture the uncertainty that results from potential violations of certain assumptions required for identification [@Manski2003].
+
+Consider an illustrative example by @Cole2019 in which they sought to quantify the effect of injection drug use on time to AIDS or death in a cohort of 1164 adult HIV-positive, AIDS-free women. These women were followed for AIDS or death up to 10 years from 12/6/95 in the Women’s Interagency HIV Study [@Barkan1998]. Overall, 127 of 1164 women (11%) were lost to follow up. Adjusted risk differences were obtained via inverse probability weighting. Adjustment was made for age, race and nadir CD4 cell count.
+
+Figure 4 shows the results from the analysis. The top left panel shows the unadjusted risk difference over follow-up. The top right panel shows the corresponding risk difference after adjusting for loss to follow-up and measured confounders. The bottom left panel shows the identification bounds that result from loss to follow-up. And the bottom right panel shows the identification boudns that result from both loss to follow-up and unmeasured confounding. Specifically, the black area shows all possible risk differences that could arise given the data.
+
+```{r, out.width = "300px",echo=F}
+knitr::include_graphics("./figures/bounds.png")
+```
+
+The bottom right panel in Figure 4 tells us something critically important that we often fail to consider when conducting an empirical study. As Judea Pearl recently noted, "data are profoundly dumb" [@Pearl2018] and Figure 4 shows us why. Without assumptions, data alone often cannot point identify a causal effect of interest. Rather, when we interpret that a point estimate from a statistical model as a causal effect estimate, we are invoking a whole set of assumptions (knowingly or unknowingly) that allow us to get a single number out of our data, rather than a range of possible values.
+
+\noindent {\Large \bf Correlation versus Causation}^[Much of this section is based on work by Judea Pearl]
+
+In his *The Grammar of Science,* Karl @Pearson1911 wrote "[b]eyond such discarded fundamentals as 'matter' and 'force' lies still another fetish amidst the inscrutable arcana of modern science, namely, the category of cause and effect." He suggested that rather than pursue an understanding of cause-effect relations, scientists would be best served by measuring correlations through tables that classify individuals into specific categories. "Such a table is termed a contingency table, and the ultimate scientific statement of description of the relation between two things can always be thrown back upon such a contingency table."
+
+Over a century later, a majority of statistics courses treat causal inference by simply stating that "correlation is not causation." This treatment is hardly sufficient, for at least two reasons: 1) As scientists, our primary interst is (should be) in cause-effect relations; 2) People continue to conflate correlation with causation^[Daniel Westreich and I reviewed a book in which the allure of "Big Data" was so strong, the authors quickly forgot that correlation $\neq$ causation. See @Naimi2014d]. For both of these reasons, we very much need to indentify the conditions that would allow us to understand causality better. This is what "causal inference" is all about.
+
+In this course, I adopt the view that **the causal and statistical aspects of a scientific study should be kept as separate as possible.** The objective is to first articulate the conditions under which causal inference is possible, and then to understand what statistical tools will enable us to answer the causal question.^[ Loosely speaking: Causal inference is the "what?" Statistics is the "how?" Epidemiology is the "why?"] Causal inference tells us what we should estimate, and whether we can. Statistics tells us how to estimate it. By implication, we should avoid treating statistical models as if they were causal. Furthermore, to the best of our ability, we should avoid imposing unnecessary parametric assumptions on the causal models that we believe are generating the data. I will try to clarify what I intend by this in the next section on models.
+
+\newpage
+
+# References
